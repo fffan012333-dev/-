@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>代发OI计算器</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div class="toolbar-main">
+          <p class="eyebrow toolbar-badge">Dispatch Tool</p>
+          <div class="toolbar-mainline">
+            <h1>代发OI计算器</h1>
+            <p class="hero-hint">现成组套可自动带值，特殊组套可手动录入并配合检索填写。</p>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <button id="reset-button" class="secondary-button" type="button">清空输入</button>
+          <button id="copy-button" class="primary-button" type="button">复制当前场景</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="search-grid">
+          <section class="panel search-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="panel-kicker">Lookup</p>
+                <h2>COGS 检索</h2>
+              </div>
+            </div>
+            <div class="search-box">
+              <input
+                id="cogs-search-input"
+                class="search-input"
+                type="search"
+                placeholder="输入商品全称或 2 到 3 个关键字"
+              />
+            </div>
+            <div id="cogs-search-results" class="search-results"></div>
+            <div id="cogs-search-selection" class="search-selection empty-selection">
+              还没有选中规格
+            </div>
+          </section>
+
+          <section class="panel search-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="panel-kicker">Lookup</p>
+                <h2>仓物检索</h2>
+              </div>
+            </div>
+            <div class="search-box">
+              <input
+                id="warehouse-search-input"
+                class="search-input"
+                type="search"
+                placeholder="输入商品全称或 2 到 3 个关键字"
+              />
+            </div>
+            <div id="warehouse-search-results" class="search-results"></div>
+            <div id="warehouse-search-selection" class="search-selection empty-selection">
+              还没有选中规格
+            </div>
+          </section>
+        </section>
+
+        <section class="panel main-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Result</p>
+              <h2>正式测算</h2>
+            </div>
+            <button id="add-comparison-button" class="secondary-button" type="button">新增对比项</button>
+          </div>
+
+          <div class="table-wrap">
+            <table class="result-table">
+              <thead id="result-table-head"></thead>
+              <tbody id="result-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Summary</p>
+              <h2>OI率对比</h2>
+            </div>
+          </div>
+          <div id="oi-rate-summary" class="oi-rate-summary"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Price Plan</p>
+              <h2>公司价盘规划</h2>
+            </div>
+          </div>
+          <div class="search-box">
+            <input
+              id="price-plan-search-input"
+              class="search-input"
+              type="search"
+              placeholder="输入组套名称或商品规格，查看 C / B / A / S / SS 价盘"
+            />
+          </div>
+          <div id="price-plan-search-results" class="search-results"></div>
+          <div id="price-plan-selection" class="price-plan-selection empty-selection">
+            还没有选中规格
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Logic</p>
+              <h2>关键口径</h2>
+            </div>
+          </div>
+          <div id="logic-notes" class="logic-notes"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./data/ready-made-data.js"></script>
+    <script src="./data/product-cogs-data.js"></script>
+    <script src="./data/price-plan-data.js"></script>
+    <script src="./data/config.js"></script>
+    <datalist id="ready-made-spec-options"></datalist>
+    <script src="./app.js"></script>
+  </body>
+</html>

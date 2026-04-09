@@ -1,5 +1,7 @@
 (function () {
-  const STORAGE_KEY = "oi-calculator:v5";
+  const STORAGE_KEY = "oi-calculator:v6";
+  const LEGACY_STORAGE_KEYS = ["oi-calculator:v5"];
+  const SCENARIOS_STORAGE_KEY = "oi-calculator:saved-scenarios:v1";
   const config = window.OI_CALCULATOR_CONFIG;
 
   const elements = {
@@ -17,48 +19,110 @@
     pricePlanSearchResults: document.getElementById("price-plan-search-results"),
     pricePlanSelection: document.getElementById("price-plan-selection"),
     oiRateSummary: document.getElementById("oi-rate-summary"),
+    saveScenarioButton: document.getElementById("save-scenario-button"),
+    viewHistoryButton: document.getElementById("view-history-button"),
+    saveStatus: document.getElementById("save-status"),
+    savedScenarioCount: document.getElementById("saved-scenario-count"),
+    savedScenariosList: document.getElementById("saved-scenarios-list"),
+    historyDrawer: document.getElementById("history-drawer"),
+    historyDrawerBackdrop: document.getElementById("history-drawer-backdrop"),
+    closeHistoryButton: document.getElementById("close-history-button"),
+    scenarioPreviewModal: document.getElementById("scenario-preview-modal"),
+    scenarioPreviewBackdrop: document.getElementById("scenario-preview-backdrop"),
+    scenarioPreviewTitle: document.getElementById("scenario-preview-title"),
+    scenarioPreviewMeta: document.getElementById("scenario-preview-meta"),
+    scenarioPreviewContent: document.getElementById("scenario-preview-content"),
+    closeScenarioPreviewButton: document.getElementById("close-scenario-preview-button"),
+    utilityPanelBackdrop: document.getElementById("utility-panel-backdrop"),
+    cogsPanel: document.getElementById("cogs-panel"),
+    warehousePanel: document.getElementById("warehouse-panel"),
+    pricePlanPanel: document.getElementById("price-plan-panel"),
+    logicPanel: document.getElementById("logic-panel"),
+    openCogsPanelButton: document.getElementById("open-cogs-panel-button"),
+    openWarehousePanelButton: document.getElementById("open-warehouse-panel-button"),
+    openPricePlanPanelButton: document.getElementById("open-price-plan-panel-button"),
+    openLogicPanelButton: document.getElementById("open-logic-panel-button"),
+    tableWrap: document.getElementById("table-wrap"),
     addComparisonButton: document.getElementById("add-comparison-button"),
     resetButton: document.getElementById("reset-button"),
     copyButton: document.getElementById("copy-button"),
   };
 
   const state = loadState();
+  let savedScenarios = loadSavedScenarios();
+  let saveStatus = {
+    tone: "info",
+    text: "保存后可在历史方案中随时读取或加入当前对比。",
+  };
+  let isHistoryDrawerOpen = false;
+  let previewScenarioId = null;
+  let activeUtilityPanel = null;
+  let lastRenderedColumnCount = null;
 
   function loadState() {
     const fallback = {
       columns: [createComparisonColumn(1)],
+      activeScenarioId: null,
     };
 
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        return fallback;
+    const keys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
+
+    for (const key of keys) {
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) {
+          continue;
+        }
+
+        const parsed = JSON.parse(raw);
+        return {
+          columns: hydrateColumns(parsed.columns),
+          activeScenarioId:
+            typeof parsed.activeScenarioId === "string" ? parsed.activeScenarioId : null,
+        };
+      } catch (error) {
+        // Continue to the next storage key.
       }
-
-      const parsed = JSON.parse(raw);
-      const parsedColumns = Array.isArray(parsed.columns) ? parsed.columns : [];
-
-      return {
-        columns:
-          parsedColumns.length > 0
-            ? parsedColumns.map((column, index) => ({
-                id: column.id || createColumnId(),
-                title: column.title || `对比${index + 1}`,
-                mode: column.mode || config.defaults.mode || "special",
-                inputs: {
-                  ...config.defaults.inputs,
-                  ...(column.inputs || {}),
-                },
-              }))
-            : fallback.columns,
-      };
-    } catch (error) {
-      return fallback;
     }
+
+    return fallback;
   }
 
   function createColumnId() {
     return `comparison-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function createScenarioId() {
+    return `scenario-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function hydrateColumns(columns) {
+    const parsedColumns = Array.isArray(columns) ? columns : [];
+    if (parsedColumns.length === 0) {
+      return [createComparisonColumn(1)];
+    }
+
+    return parsedColumns.map((column, index) => ({
+      id: createColumnId(),
+      title: column.title || `对比${index + 1}`,
+      mode: column.mode || config.defaults.mode || "special",
+      inputs: {
+        ...config.defaults.inputs,
+        ...(column.inputs || {}),
+      },
+    }));
+  }
+
+  function cloneColumnsForStorage(columns) {
+    return columns.map((column, index) => ({
+      id: column.id || createColumnId(),
+      title: column.title || `对比${index + 1}`,
+      mode: column.mode || config.defaults.mode || "special",
+      inputs: {
+        ...config.defaults.inputs,
+        ...(column.inputs || {}),
+      },
+    }));
   }
 
   function createComparisonColumn(index) {
@@ -82,8 +146,121 @@
     };
   }
 
+  function cloneScenarioColumnsForComparison(columns, scenarioName) {
+    const hydratedColumns = hydrateColumns(columns);
+    return hydratedColumns.map((column, index) => ({
+      id: createColumnId(),
+      title:
+        hydratedColumns.length === 1
+          ? scenarioName
+          : `${scenarioName}-${column.title || `对比${index + 1}`}`,
+      mode: column.mode || config.defaults.mode || "special",
+      inputs: {
+        ...config.defaults.inputs,
+        ...(column.inputs || {}),
+      },
+    }));
+  }
+
   function persistState() {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        columns: cloneColumnsForStorage(state.columns),
+        activeScenarioId: state.activeScenarioId || null,
+      }),
+    );
+  }
+
+  function loadSavedScenarios() {
+    try {
+      const raw = window.localStorage.getItem(SCENARIOS_STORAGE_KEY);
+      if (!raw) {
+        return [];
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map((item) => {
+          if (!item || typeof item !== "object") {
+            return null;
+          }
+
+          return {
+            id: typeof item.id === "string" ? item.id : createScenarioId(),
+            name: typeof item.name === "string" ? item.name : "未命名方案",
+            savedAt: typeof item.savedAt === "string" ? item.savedAt : new Date().toISOString(),
+            columns: cloneColumnsForStorage(Array.isArray(item.columns) ? item.columns : []),
+          };
+        })
+        .filter(Boolean)
+        .sort((left, right) => String(right.savedAt).localeCompare(String(left.savedAt)));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function persistSavedScenarios() {
+    window.localStorage.setItem(SCENARIOS_STORAGE_KEY, JSON.stringify(savedScenarios));
+  }
+
+  function setSaveStatus(text, tone = "info") {
+    saveStatus = { text, tone };
+    renderSaveCenter();
+  }
+
+  function formatSavedAt(value) {
+    if (!value) {
+      return "";
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  }
+
+  function getScenarioNamingColumn() {
+    return (
+      state.columns.find((column) => {
+        const inputs = column.inputs || {};
+        return inputs.productSpec || inputs.unitArrivalPrice || inputs.frontDiscountRate;
+      }) || state.columns[0]
+    );
+  }
+
+  function formatScenarioNameValue(value) {
+    if (value === null || value === undefined || value === "") {
+      return "-";
+    }
+
+    return new Intl.NumberFormat("zh-CN", {
+      maximumFractionDigits: 2,
+    }).format(sanitizeNumber(value));
+  }
+
+  function getAutoScenarioName() {
+    const column = getScenarioNamingColumn();
+    const inputs = column?.inputs || {};
+    const spec = String(inputs.productSpec || "").trim() || "未填规格";
+    const arrivalPrice = getInputNumericValue("unitArrivalPrice", inputs.unitArrivalPrice);
+    const frontDiscountRate = getInputNumericValue("frontDiscountRate", inputs.frontDiscountRate);
+    const suffix = state.columns.length > 1 ? ` 等${state.columns.length}组` : "";
+    return `${spec}｜到手价${formatScenarioNameValue(arrivalPrice)}｜前折${formatValue(
+      frontDiscountRate,
+      "percent",
+    )}${suffix}`;
   }
 
   function escapeHtml(value) {
@@ -96,7 +273,12 @@
   }
 
   function evaluateArithmeticExpression(value) {
-    const expression = String(value).trim();
+    const rawExpression = String(value).trim();
+    if (!rawExpression) {
+      return null;
+    }
+
+    const expression = rawExpression.replace(/^=\s*/, "").trim();
     if (!expression) {
       return null;
     }
@@ -390,6 +572,288 @@
       inputs: column.inputs,
       result: calculateScenario(column.inputs),
     }));
+  }
+
+  function getScenarioResults(columns) {
+    return hydrateColumns(columns).map((column) => ({
+      id: column.id,
+      title: column.title,
+      mode: column.mode,
+      inputs: column.inputs,
+      result: calculateScenario(column.inputs),
+    }));
+  }
+
+  function renderUtilityPanels() {
+    const panels = [
+      { key: "cogs", element: elements.cogsPanel },
+      { key: "warehouse", element: elements.warehousePanel },
+      { key: "pricePlan", element: elements.pricePlanPanel },
+      { key: "logic", element: elements.logicPanel },
+    ];
+
+    if (elements.utilityPanelBackdrop) {
+      elements.utilityPanelBackdrop.classList.toggle("hidden", !activeUtilityPanel);
+    }
+
+    panels.forEach((panel) => {
+      if (!panel.element) {
+        return;
+      }
+
+      const isOpen = activeUtilityPanel === panel.key;
+      panel.element.classList.toggle("hidden", !isOpen);
+      panel.element.setAttribute("aria-hidden", String(!isOpen));
+    });
+  }
+
+  function renderSaveCenter() {
+    if (elements.saveScenarioButton) {
+      elements.saveScenarioButton.textContent = "保存当前方案";
+    }
+
+    if (elements.saveStatus) {
+      elements.saveStatus.textContent = saveStatus.text;
+      elements.saveStatus.className = `save-status ${saveStatus.tone === "success" ? "save-status-success" : ""}`;
+    }
+
+    if (elements.viewHistoryButton) {
+      elements.viewHistoryButton.textContent = `查看历史方案${savedScenarios.length > 0 ? `（${savedScenarios.length}）` : ""}`;
+    }
+
+    if (elements.historyDrawer && elements.historyDrawerBackdrop) {
+      elements.historyDrawer.classList.toggle("hidden", !isHistoryDrawerOpen);
+      elements.historyDrawerBackdrop.classList.toggle("hidden", !isHistoryDrawerOpen);
+      elements.historyDrawer.setAttribute("aria-hidden", String(!isHistoryDrawerOpen));
+    }
+
+    renderUtilityPanels();
+    renderScenarioPreview();
+
+    if (elements.savedScenarioCount) {
+      elements.savedScenarioCount.textContent = `${savedScenarios.length} 个方案`;
+    }
+
+    if (!elements.savedScenariosList) {
+      return;
+    }
+
+    if (savedScenarios.length === 0) {
+      elements.savedScenariosList.innerHTML =
+        '<div class="saved-scenario-empty">还没有保存过方案，先保存一版当前测算试试。</div>';
+      return;
+    }
+
+    elements.savedScenariosList.innerHTML = savedScenarios
+      .map(
+        (scenario) => `
+          <article class="saved-scenario-card ${scenario.id === state.activeScenarioId ? "is-active" : ""}">
+            <div class="saved-scenario-main">
+              <div>
+                <p class="saved-scenario-name">${escapeHtml(scenario.name)}</p>
+                <p class="saved-scenario-meta">
+                  ${escapeHtml(`${scenario.columns.length} 个对比项`)}
+                </p>
+                <p class="saved-scenario-meta">
+                  最近保存 ${escapeHtml(formatSavedAt(scenario.savedAt) || "-")}
+                </p>
+              </div>
+              ${scenario.id === state.activeScenarioId ? '<span class="saved-scenario-badge">当前方案</span>' : ""}
+            </div>
+            <div class="saved-scenario-actions">
+              <button
+                type="button"
+                class="mini-button"
+                data-append-scenario-id="${escapeHtml(scenario.id)}"
+              >
+                加入对比
+              </button>
+              <button
+                type="button"
+                class="mini-button"
+                data-load-scenario-id="${escapeHtml(scenario.id)}"
+              >
+                读取
+              </button>
+              <button
+                type="button"
+                class="mini-link-button"
+                data-delete-scenario-id="${escapeHtml(scenario.id)}"
+              >
+                删除
+              </button>
+            </div>
+          </article>
+        `,
+      )
+      .join("");
+  }
+
+  function renderScenarioPreview() {
+    if (
+      !elements.scenarioPreviewModal ||
+      !elements.scenarioPreviewBackdrop ||
+      !elements.scenarioPreviewTitle ||
+      !elements.scenarioPreviewMeta ||
+      !elements.scenarioPreviewContent
+    ) {
+      return;
+    }
+
+    const scenario = savedScenarios.find((item) => item.id === previewScenarioId) || null;
+    const isOpen = Boolean(scenario);
+
+    elements.scenarioPreviewModal.classList.toggle("hidden", !isOpen);
+    elements.scenarioPreviewBackdrop.classList.toggle("hidden", !isOpen);
+    elements.scenarioPreviewModal.setAttribute("aria-hidden", String(!isOpen));
+
+    if (!scenario) {
+      elements.scenarioPreviewTitle.textContent = "方案预览";
+      elements.scenarioPreviewMeta.textContent = "";
+      elements.scenarioPreviewContent.innerHTML = "";
+      return;
+    }
+
+    const results = getScenarioResults(scenario.columns);
+    elements.scenarioPreviewTitle.textContent = scenario.name;
+    elements.scenarioPreviewMeta.textContent = `最近保存 ${formatSavedAt(
+      scenario.savedAt,
+    )} · ${results.length} 个对比项`;
+    elements.scenarioPreviewContent.innerHTML = `
+      <div class="scenario-preview-grid">
+        ${results
+          .map(
+            (item) => `
+              <article class="scenario-preview-card">
+                <h3>${escapeHtml(item.title)}</h3>
+                <div class="scenario-preview-list">
+                  <div class="scenario-preview-item">
+                    <span>组套类型</span>
+                    <strong>${escapeHtml(item.mode === "readyMade" ? "现成组套" : "特殊组套")}</strong>
+                  </div>
+                  <div class="scenario-preview-item">
+                    <span>商品规格</span>
+                    <strong>${escapeHtml(item.inputs.productSpec || "-")}</strong>
+                  </div>
+                  <div class="scenario-preview-item">
+                    <span>单品到手价</span>
+                    <strong>${escapeHtml(formatValue(item.result.unitArrivalPrice, "currency"))}</strong>
+                  </div>
+                  <div class="scenario-preview-item">
+                    <span>前台折价</span>
+                    <strong>${escapeHtml(formatValue(item.result.frontDiscountRate, "percent"))}</strong>
+                  </div>
+                  <div class="scenario-preview-item">
+                    <span>后台折价</span>
+                    <strong>${escapeHtml(formatValue(item.result.backDiscountRate, "percent"))}</strong>
+                  </div>
+                  <div class="scenario-preview-item">
+                    <span>单品 COGS</span>
+                    <strong>${escapeHtml(formatValue(item.result.unitCogs, "currency"))}</strong>
+                  </div>
+                  <div class="scenario-preview-item">
+                    <span>单品仓物</span>
+                    <strong>${escapeHtml(formatValue(item.result.unitWarehouseCost, "currency"))}</strong>
+                  </div>
+                  <div class="scenario-preview-item">
+                    <span>OI</span>
+                    <strong>${escapeHtml(formatValue(item.result.oi, "currency"))}</strong>
+                  </div>
+                  <div class="scenario-preview-item">
+                    <span>OI率</span>
+                    <strong>${escapeHtml(formatValue(item.result.oiRate, "percent"))}</strong>
+                  </div>
+                </div>
+              </article>
+            `,
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  function saveScenario() {
+    const scenarioName = getAutoScenarioName();
+    const payload = {
+      id: createScenarioId(),
+      name: scenarioName,
+      savedAt: new Date().toISOString(),
+      columns: cloneColumnsForStorage(state.columns),
+    };
+
+    savedScenarios.unshift(payload);
+
+    savedScenarios = savedScenarios
+      .slice()
+      .sort((left, right) => String(right.savedAt).localeCompare(String(left.savedAt)));
+
+    state.activeScenarioId = payload.id;
+    persistSavedScenarios();
+    persistState();
+    render();
+    setSaveStatus(`已保存：${scenarioName}，可点击“查看历史方案”继续调用。`, "success");
+  }
+
+  function previewScenario(scenarioId) {
+    const scenario = savedScenarios.find((item) => item.id === scenarioId);
+    if (!scenario) {
+      setSaveStatus("没有找到这个方案，可以重新保存一版。");
+      return;
+    }
+
+    previewScenarioId = scenario.id;
+    renderSaveCenter();
+  }
+
+  function appendScenarioToComparison(scenarioId) {
+    const scenario = savedScenarios.find((item) => item.id === scenarioId);
+    if (!scenario) {
+      setSaveStatus("没有找到这个方案，可以重新保存一版。");
+      return;
+    }
+
+    const appendedColumns = cloneScenarioColumnsForComparison(scenario.columns, scenario.name);
+    state.columns.push(...appendedColumns);
+    persistState();
+    render();
+    setSaveStatus(`已将方案“${scenario.name}”加入当前对比。`, "success");
+  }
+
+  function deleteScenario(scenarioId) {
+    const scenario = savedScenarios.find((item) => item.id === scenarioId);
+    savedScenarios = savedScenarios.filter((item) => item.id !== scenarioId);
+    persistSavedScenarios();
+
+    if (state.activeScenarioId === scenarioId) {
+      state.activeScenarioId = null;
+      persistState();
+    }
+
+    renderSaveCenter();
+    setSaveStatus(
+      scenario ? `已删除方案：${scenario.name}` : "已删除方案。",
+      "success",
+    );
+  }
+
+  function toggleHistoryDrawer(forceOpen) {
+    isHistoryDrawerOpen = typeof forceOpen === "boolean" ? forceOpen : !isHistoryDrawerOpen;
+    renderSaveCenter();
+  }
+
+  function toggleUtilityPanel(panelKey) {
+    activeUtilityPanel = activeUtilityPanel === panelKey ? null : panelKey;
+    renderSaveCenter();
+  }
+
+  function closeUtilityPanel() {
+    activeUtilityPanel = null;
+    renderSaveCenter();
+  }
+
+  function closeScenarioPreview() {
+    previewScenarioId = null;
+    renderSaveCenter();
   }
 
   function normalizeQueryTokens(value) {
@@ -843,6 +1307,31 @@
       .join("");
   }
 
+  function centerTableWrapOnColumnChange() {
+    if (!elements.tableWrap) {
+      return;
+    }
+
+    const currentColumnCount = state.columns.length;
+    if (currentColumnCount === lastRenderedColumnCount) {
+      return;
+    }
+
+    lastRenderedColumnCount = currentColumnCount;
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const container = elements.tableWrap;
+        if (!container) {
+          return;
+        }
+
+        const maxScroll = container.scrollWidth - container.clientWidth;
+        container.scrollLeft = maxScroll > 0 ? maxScroll / 2 : 0;
+      });
+    });
+  }
+
   function copyScenario(results) {
     const payload = {
       comparisons: results.map((item) => ({
@@ -872,10 +1361,12 @@
 
   function render() {
     const results = getCurrentResult();
+    renderSaveCenter();
     renderReadyMadeOptions();
     renderLogicNotes();
     renderTableHead();
     renderTable(results);
+    centerTableWrapOnColumnChange();
     renderOiRateSummary(results);
     renderLookupResults("cogs");
     renderLookupResults("warehouse");
@@ -920,9 +1411,28 @@
     }
   }
 
+  function commitActiveFormulaInput() {
+    const activeInput = document.activeElement;
+    if (!(activeInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const columnId = activeInput.dataset.columnId;
+    const inputKey = activeInput.dataset.inputKey;
+    if (!columnId || !inputKey) {
+      return;
+    }
+
+    commitFormulaValue(columnId, inputKey);
+    persistState();
+    render();
+  }
+
   function resetState() {
     state.columns = [createComparisonColumn(1)];
+    state.activeScenarioId = null;
     persistState();
+    setSaveStatus("已清空当前测算，历史方案仍然保留在本机浏览器中。");
     render();
   }
 
@@ -971,6 +1481,101 @@
   }
 
   function bindEvents() {
+    elements.saveScenarioButton.addEventListener("click", () => {
+      saveScenario();
+    });
+
+    elements.viewHistoryButton.addEventListener("click", () => {
+      toggleHistoryDrawer(true);
+    });
+
+    elements.closeHistoryButton.addEventListener("click", () => {
+      toggleHistoryDrawer(false);
+    });
+
+    elements.historyDrawerBackdrop.addEventListener("click", () => {
+      toggleHistoryDrawer(false);
+    });
+
+    elements.openCogsPanelButton.addEventListener("click", () => {
+      toggleUtilityPanel("cogs");
+    });
+
+    elements.openWarehousePanelButton.addEventListener("click", () => {
+      toggleUtilityPanel("warehouse");
+    });
+
+    elements.openPricePlanPanelButton.addEventListener("click", () => {
+      toggleUtilityPanel("pricePlan");
+    });
+
+    elements.openLogicPanelButton.addEventListener("click", () => {
+      toggleUtilityPanel("logic");
+    });
+
+    elements.utilityPanelBackdrop.addEventListener("click", () => {
+      closeUtilityPanel();
+    });
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const closeButton = target.closest("[data-close-utility-panel]");
+      if (!closeButton) {
+        return;
+      }
+
+      closeUtilityPanel();
+    });
+
+    elements.closeScenarioPreviewButton.addEventListener("click", () => {
+      closeScenarioPreview();
+    });
+
+    elements.scenarioPreviewBackdrop.addEventListener("click", () => {
+      closeScenarioPreview();
+    });
+
+    elements.savedScenariosList.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const loadButton = target.closest("[data-load-scenario-id]");
+      if (loadButton) {
+        const scenarioId = loadButton.getAttribute("data-load-scenario-id");
+        if (scenarioId) {
+          previewScenario(scenarioId);
+        }
+        return;
+      }
+
+      const appendButton = target.closest("[data-append-scenario-id]");
+      if (appendButton) {
+        const scenarioId = appendButton.getAttribute("data-append-scenario-id");
+        if (scenarioId) {
+          appendScenarioToComparison(scenarioId);
+        }
+        return;
+      }
+
+      const deleteButton = target.closest("[data-delete-scenario-id]");
+      if (!deleteButton) {
+        return;
+      }
+
+      const scenarioId = deleteButton.getAttribute("data-delete-scenario-id");
+      if (!scenarioId) {
+        return;
+      }
+
+      deleteScenario(scenarioId);
+    });
+
     elements.resultTableBody.addEventListener("compositionstart", (event) => {
       const target = event.target;
       if (target instanceof HTMLInputElement) {
@@ -1008,8 +1613,43 @@
       updateTableInputValue(target, true);
     });
 
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        const activeInput = document.activeElement;
+        if (!(activeInput instanceof HTMLInputElement)) {
+          return;
+        }
+
+        if (
+          activeInput.dataset.columnId &&
+          activeInput.dataset.inputKey &&
+          target !== activeInput &&
+          !target.closest(
+            `[data-column-id="${activeInput.dataset.columnId}"][data-input-key="${activeInput.dataset.inputKey}"]`,
+          )
+        ) {
+          commitActiveFormulaInput();
+        }
+      },
+      true,
+    );
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== "Tab") {
+        return;
+      }
+
+      commitActiveFormulaInput();
+    });
+
     elements.resultTableBody.addEventListener(
-      "blur",
+      "focusout",
       (event) => {
         const target = event.target;
         if (!(target instanceof HTMLInputElement)) {
@@ -1031,7 +1671,6 @@
         persistState();
         render();
       },
-      true,
     );
 
     elements.resultTableHead.addEventListener("input", (event) => {

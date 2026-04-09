@@ -23,48 +23,33 @@
       </header>
 
       <main class="workspace">
-        <section class="search-grid">
-          <section class="panel search-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="panel-kicker">Lookup</p>
-                <h2>COGS 检索</h2>
-              </div>
+        <section class="panel save-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">Save Center</p>
+              <h2>方案保存中心</h2>
             </div>
-            <div class="search-box">
-              <input
-                id="cogs-search-input"
-                class="search-input"
-                type="search"
-                placeholder="输入商品全称或 2 到 3 个关键字"
-              />
-            </div>
-            <div id="cogs-search-results" class="search-results"></div>
-            <div id="cogs-search-selection" class="search-selection empty-selection">
-              还没有选中规格
-            </div>
-          </section>
+          </div>
+          <div class="save-toolbar">
+            <button id="save-scenario-button" class="primary-button" type="button">
+              保存当前方案
+            </button>
+            <button id="view-history-button" class="secondary-button" type="button">
+              查看历史方案
+            </button>
+            <p id="save-status" class="save-status">
+              保存后可在历史方案中随时读取或加入当前对比。
+            </p>
+          </div>
+        </section>
 
-          <section class="panel search-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="panel-kicker">Lookup</p>
-                <h2>仓物检索</h2>
-              </div>
-            </div>
-            <div class="search-box">
-              <input
-                id="warehouse-search-input"
-                class="search-input"
-                type="search"
-                placeholder="输入商品全称或 2 到 3 个关键字"
-              />
-            </div>
-            <div id="warehouse-search-results" class="search-results"></div>
-            <div id="warehouse-search-selection" class="search-selection empty-selection">
-              还没有选中规格
-            </div>
-          </section>
+        <section class="panel tool-panel">
+          <div class="tool-launchers">
+            <button id="open-cogs-panel-button" class="secondary-button" type="button">COGS 检索</button>
+            <button id="open-warehouse-panel-button" class="secondary-button" type="button">仓物检索</button>
+            <button id="open-price-plan-panel-button" class="secondary-button" type="button">公司价盘</button>
+            <button id="open-logic-panel-button" class="secondary-button" type="button">关键口径</button>
+          </div>
         </section>
 
         <section class="panel main-panel">
@@ -76,11 +61,13 @@
             <button id="add-comparison-button" class="secondary-button" type="button">新增对比项</button>
           </div>
 
-          <div class="table-wrap">
-            <table class="result-table">
-              <thead id="result-table-head"></thead>
-              <tbody id="result-table-body"></tbody>
-            </table>
+          <div id="table-wrap" class="table-wrap">
+            <div class="table-stage">
+              <table class="result-table">
+                <thead id="result-table-head"></thead>
+                <tbody id="result-table-body"></tbody>
+              </table>
+            </div>
           </div>
         </section>
 
@@ -93,39 +80,115 @@
           </div>
           <div id="oi-rate-summary" class="oi-rate-summary"></div>
         </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="panel-kicker">Price Plan</p>
-              <h2>公司价盘规划</h2>
-            </div>
-          </div>
-          <div class="search-box">
-            <input
-              id="price-plan-search-input"
-              class="search-input"
-              type="search"
-              placeholder="输入组套名称或商品规格，查看 C / B / A / S / SS 价盘"
-            />
-          </div>
-          <div id="price-plan-search-results" class="search-results"></div>
-          <div id="price-plan-selection" class="price-plan-selection empty-selection">
-            还没有选中规格
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="panel-kicker">Logic</p>
-              <h2>关键口径</h2>
-            </div>
-          </div>
-          <div id="logic-notes" class="logic-notes"></div>
-        </section>
       </main>
     </div>
+
+    <div id="utility-panel-backdrop" class="history-drawer-backdrop hidden"></div>
+    <section id="cogs-panel" class="utility-panel hidden" aria-hidden="true">
+      <div class="history-drawer-head">
+        <div>
+          <p class="panel-kicker">Lookup</p>
+          <h2>COGS 检索</h2>
+        </div>
+        <button class="mini-link-button" data-close-utility-panel="cogs" type="button">关闭</button>
+      </div>
+      <div class="search-box">
+        <input
+          id="cogs-search-input"
+          class="search-input"
+          type="search"
+          placeholder="输入商品全称或 2 到 3 个关键字"
+        />
+      </div>
+      <div id="cogs-search-results" class="search-results"></div>
+      <div id="cogs-search-selection" class="search-selection empty-selection">
+        还没有选中规格
+      </div>
+    </section>
+
+    <section id="warehouse-panel" class="utility-panel hidden" aria-hidden="true">
+      <div class="history-drawer-head">
+        <div>
+          <p class="panel-kicker">Lookup</p>
+          <h2>仓物检索</h2>
+        </div>
+        <button class="mini-link-button" data-close-utility-panel="warehouse" type="button">关闭</button>
+      </div>
+      <div class="search-box">
+        <input
+          id="warehouse-search-input"
+          class="search-input"
+          type="search"
+          placeholder="输入商品全称或 2 到 3 个关键字"
+        />
+      </div>
+      <div id="warehouse-search-results" class="search-results"></div>
+      <div id="warehouse-search-selection" class="search-selection empty-selection">
+        还没有选中规格
+      </div>
+    </section>
+
+    <section id="price-plan-panel" class="utility-panel hidden" aria-hidden="true">
+      <div class="history-drawer-head">
+        <div>
+          <p class="panel-kicker">Price Plan</p>
+          <h2>公司价盘规划</h2>
+        </div>
+        <button class="mini-link-button" data-close-utility-panel="pricePlan" type="button">关闭</button>
+      </div>
+      <div class="search-box">
+        <input
+          id="price-plan-search-input"
+          class="search-input"
+          type="search"
+          placeholder="输入组套名称或商品规格，查看 C / B / A / S / SS 价盘"
+        />
+      </div>
+      <div id="price-plan-search-results" class="search-results"></div>
+      <div id="price-plan-selection" class="price-plan-selection empty-selection">
+        还没有选中规格
+      </div>
+    </section>
+
+    <section id="logic-panel" class="utility-panel hidden" aria-hidden="true">
+      <div class="history-drawer-head">
+        <div>
+          <p class="panel-kicker">Logic</p>
+          <h2>关键口径</h2>
+        </div>
+        <button class="mini-link-button" data-close-utility-panel="logic" type="button">关闭</button>
+      </div>
+      <div id="logic-notes" class="logic-notes"></div>
+    </section>
+
+    <div id="history-drawer-backdrop" class="history-drawer-backdrop hidden"></div>
+    <aside id="history-drawer" class="history-drawer hidden" aria-hidden="true">
+      <div class="history-drawer-head">
+        <div>
+          <p class="panel-kicker">History</p>
+          <h2>历史方案</h2>
+        </div>
+        <button id="close-history-button" class="mini-link-button" type="button">关闭</button>
+      </div>
+      <div class="save-library-head">
+        <span class="selection-label">已保存方案</span>
+        <span id="saved-scenario-count" class="save-library-count">0 个方案</span>
+      </div>
+      <div id="saved-scenarios-list" class="saved-scenarios-list"></div>
+    </aside>
+
+    <div id="scenario-preview-backdrop" class="history-drawer-backdrop hidden"></div>
+    <section id="scenario-preview-modal" class="scenario-preview-modal hidden" aria-hidden="true">
+      <div class="history-drawer-head">
+        <div>
+          <p class="panel-kicker">Preview</p>
+          <h2 id="scenario-preview-title">方案预览</h2>
+        </div>
+        <button id="close-scenario-preview-button" class="mini-link-button" type="button">关闭</button>
+      </div>
+      <p id="scenario-preview-meta" class="save-status"></p>
+      <div id="scenario-preview-content" class="scenario-preview-content"></div>
+    </section>
 
     <script src="./data/ready-made-data.js"></script>
     <script src="./data/product-cogs-data.js"></script>

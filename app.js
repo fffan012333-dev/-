@@ -58,6 +58,7 @@
   let previewScenarioId = null;
   let activeUtilityPanel = null;
   let lastRenderedColumnCount = null;
+  let activeReadyMadeSuggestionColumnId = null;
 
   function loadState() {
     const fallback = {
@@ -437,6 +438,19 @@
       .toLowerCase();
   }
 
+  function hydrateLookupSources() {
+    const runtimeReadyMade = Array.isArray(window.OI_READY_MADE_DATA) ? window.OI_READY_MADE_DATA : [];
+    const runtimeCogs = Array.isArray(window.OI_PRODUCT_COGS_DATA) ? window.OI_PRODUCT_COGS_DATA : [];
+    const runtimePricePlan = Array.isArray(window.OI_PRICE_PLAN_DATA) ? window.OI_PRICE_PLAN_DATA : [];
+
+    config.lookupSources.readyMade =
+      runtimeReadyMade.length > 0 ? runtimeReadyMade : config.lookupSources.readyMade || [];
+    config.lookupSources.cogs = runtimeCogs.length > 0 ? runtimeCogs : config.lookupSources.cogs || [];
+    config.lookupSources.pricePlan =
+      runtimePricePlan.length > 0 ? runtimePricePlan : config.lookupSources.pricePlan || [];
+    config.lookupSources.warehouse = config.lookupSources.warehouse || [];
+  }
+
   function getReadyMadeRecordBySpec(specValue) {
     const normalizedSpec = normalizeSpecName(specValue);
     if (!normalizedSpec) {
@@ -447,6 +461,12 @@
       (config.lookupSources.readyMade || []).find(
         (record) => normalizeSpecName(record.name) === normalizedSpec,
       ) || null
+    );
+  }
+
+  function getReadyMadeRecordById(recordId) {
+    return (
+      (config.lookupSources.readyMade || []).find((record) => record.id === recordId) || null
     );
   }
 
@@ -940,6 +960,23 @@
     });
   }
 
+  function getReadyMadeMatches(query) {
+    const records = (config.lookupSources.readyMade || []).map((record) => ({
+      ...record,
+      keywords: Array.isArray(record.keywords) ? record.keywords : buildLookupKeywords(record.name),
+    }));
+    const tokens = normalizeQueryTokens(query);
+
+    if (tokens.length === 0) {
+      return [];
+    }
+
+    return records.filter((record) => {
+      const haystack = `${record.name} ${(record.keywords || []).join(" ")}`.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    });
+  }
+
   function renderLookupResults(type) {
     const query =
       type === "cogs" ? elements.cogsSearchInput.value : elements.warehouseSearchInput.value;
@@ -1061,6 +1098,60 @@
     elements.readyMadeSpecOptions.innerHTML = (config.lookupSources.readyMade || [])
       .map((record) => `<option value="${escapeHtml(record.name)}"></option>`)
       .join("");
+  }
+
+  function renderReadyMadeSuggestions(column) {
+    if (!column || column.mode !== "readyMade") {
+      return "";
+    }
+
+    const isOpen = activeReadyMadeSuggestionColumnId === column.id;
+    if (!isOpen) {
+      return "";
+    }
+
+    const query = String(column.inputs.productSpec || "");
+    const matches = getReadyMadeMatches(query).slice(0, 8);
+
+    if (!String(query).trim()) {
+      return `
+        <div class="ready-made-suggestions is-empty">
+          输入商品全称或 2 到 3 个关键字后，再显示现成组套候选。
+        </div>
+      `;
+    }
+
+    if (matches.length === 0) {
+      return `
+        <div class="ready-made-suggestions is-empty">
+          没有找到匹配组套，可以换全称或 2 到 3 个关键字试试。
+        </div>
+      `;
+    }
+
+    return `
+      <div class="ready-made-suggestions">
+        ${matches
+          .map(
+            (record) => `
+              <button
+                type="button"
+                class="ready-made-suggestion-item"
+                data-ready-made-id="${escapeHtml(record.id)}"
+                data-ready-made-column-id="${escapeHtml(column.id)}"
+              >
+                <span class="ready-made-suggestion-name">${escapeHtml(record.name)}</span>
+                <span class="ready-made-suggestion-meta">
+                  COGS ${escapeHtml(formatValue(record.cogs, "currency"))} / 仓物 ${escapeHtml(
+                    formatValue(record.warehouse, "currency"),
+                  )}
+                </span>
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+    `;
   }
 
   function renderPricePlanResults() {
@@ -1260,23 +1351,30 @@
                         : "数值";
               const extraAttrs =
                 row.key === "productSpec" && column?.mode === "readyMade"
-                  ? 'list="ready-made-spec-options"'
+                  ? 'autocomplete="off" spellcheck="false"'
                   : input?.type === "text"
                     ? ""
                     : `inputmode="decimal" data-step="${step}"`;
               const displayValue = getRenderedInputValue(row, input, columnResult, value);
+              const readyMadeSuggestions =
+                row.key === "productSpec" && column?.mode === "readyMade"
+                  ? renderReadyMadeSuggestions(column)
+                  : "";
 
               return `
                 <td>
-                  <input
-                    class="table-input"
-                    type="text"
-                    data-column-id="${columnResult.id}"
-                    data-input-key="${row.key}"
-                    ${extraAttrs}
-                    value="${escapeHtml(String(displayValue ?? ""))}"
-                    placeholder="${placeholder}"
-                  />
+                  <div class="table-input-stack">
+                    <input
+                      class="table-input"
+                      type="text"
+                      data-column-id="${columnResult.id}"
+                      data-input-key="${row.key}"
+                      ${extraAttrs}
+                      value="${escapeHtml(String(displayValue ?? ""))}"
+                      placeholder="${placeholder}"
+                    />
+                    ${readyMadeSuggestions}
+                  </div>
                   ${
                     row.key === "productSpec" && column?.mode === "readyMade"
                       ? '<span class="comparison-auto-tag">匹配后自动带入单品 COGS / 单品仓物</span>'
@@ -1613,6 +1711,66 @@
       updateTableInputValue(target, true);
     });
 
+    elements.resultTableBody.addEventListener("focusin", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) {
+        return;
+      }
+
+      const columnId = target.dataset.columnId;
+      const inputKey = target.dataset.inputKey;
+      if (!columnId || inputKey !== "productSpec") {
+        return;
+      }
+
+      const column = state.columns.find((item) => item.id === columnId);
+      if (!column || column.mode !== "readyMade") {
+        return;
+      }
+
+      if (activeReadyMadeSuggestionColumnId === columnId) {
+        return;
+      }
+
+      activeReadyMadeSuggestionColumnId = columnId;
+      renderWithInputFocus(columnId, inputKey, target.selectionStart, target.selectionEnd);
+    });
+
+    elements.resultTableBody.addEventListener(
+      "pointerdown",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        const suggestionButton = target.closest("[data-ready-made-id]");
+        if (!suggestionButton) {
+          return;
+        }
+
+        event.preventDefault();
+
+        const recordId = suggestionButton.getAttribute("data-ready-made-id");
+        const columnId = suggestionButton.getAttribute("data-ready-made-column-id");
+        if (!recordId || !columnId) {
+          return;
+        }
+
+        const column = state.columns.find((item) => item.id === columnId);
+        const record = getReadyMadeRecordById(recordId);
+        if (!column || !record) {
+          return;
+        }
+
+        applyReadyMadeRecord(column, record);
+        activeReadyMadeSuggestionColumnId = null;
+        persistState();
+        render();
+      },
+      true,
+    );
+
     document.addEventListener(
       "pointerdown",
       (event) => {
@@ -1635,6 +1793,15 @@
           )
         ) {
           commitActiveFormulaInput();
+        }
+
+        if (
+          activeReadyMadeSuggestionColumnId &&
+          !target.closest(".table-input-stack") &&
+          !target.closest(".ready-made-suggestions")
+        ) {
+          activeReadyMadeSuggestionColumnId = null;
+          render();
         }
       },
       true,
@@ -1665,6 +1832,9 @@
         const column = state.columns.find((item) => item.id === columnId);
         if (inputKey === "productSpec" && column?.mode === "readyMade") {
           syncReadyMadeInputs(column);
+          if (activeReadyMadeSuggestionColumnId === columnId) {
+            activeReadyMadeSuggestionColumnId = null;
+          }
         }
 
         commitFormulaValue(columnId, inputKey);
@@ -1843,6 +2013,7 @@
     });
   }
 
+  hydrateLookupSources();
   bindEvents();
   renderLookupSelection("cogs", null);
   renderLookupSelection("warehouse", null);

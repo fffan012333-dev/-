@@ -552,6 +552,8 @@ input {
   display: grid;
   gap: 6px;
   min-height: 36px;
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 .search-result-item,
@@ -739,6 +741,13 @@ input {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.5;
+}
+
+.ready-made-suggestions-count {
+  padding: 2px 2px 4px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
 
 .ready-made-suggestion-item {

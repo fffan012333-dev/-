@@ -951,13 +951,30 @@
     const records = getLookupSource(type);
     const tokens = normalizeQueryTokens(query);
     if (tokens.length === 0) {
-      return records.slice(0, 8);
+      return records.slice(0, 12);
     }
 
-    return records.filter((record) => {
-      const haystack = `${record.name} ${(record.keywords || []).join(" ")}`.toLowerCase();
-      return tokens.every((token) => haystack.includes(token));
-    });
+    return records
+      .filter((record) => {
+        const haystack = `${record.name} ${(record.keywords || []).join(" ")}`.toLowerCase();
+        return tokens.every((token) => haystack.includes(token));
+      })
+      .sort((left, right) => {
+        const leftHaystack = `${left.name} ${(left.keywords || []).join(" ")}`.toLowerCase();
+        const rightHaystack = `${right.name} ${(right.keywords || []).join(" ")}`.toLowerCase();
+        const leftIndex = Math.min(...tokens.map((token) => leftHaystack.indexOf(token)).filter((i) => i >= 0));
+        const rightIndex = Math.min(...tokens.map((token) => rightHaystack.indexOf(token)).filter((i) => i >= 0));
+
+        if (leftIndex !== rightIndex) {
+          return leftIndex - rightIndex;
+        }
+
+        if (left.name.length !== right.name.length) {
+          return left.name.length - right.name.length;
+        }
+
+        return left.name.localeCompare(right.name, "zh-Hans-CN");
+      });
   }
 
   function getReadyMadeMatches(query) {
@@ -971,10 +988,27 @@
       return [];
     }
 
-    return records.filter((record) => {
-      const haystack = `${record.name} ${(record.keywords || []).join(" ")}`.toLowerCase();
-      return tokens.every((token) => haystack.includes(token));
-    });
+    return records
+      .filter((record) => {
+        const haystack = `${record.name} ${(record.keywords || []).join(" ")}`.toLowerCase();
+        return tokens.every((token) => haystack.includes(token));
+      })
+      .sort((left, right) => {
+        const leftHaystack = `${left.name} ${(left.keywords || []).join(" ")}`.toLowerCase();
+        const rightHaystack = `${right.name} ${(right.keywords || []).join(" ")}`.toLowerCase();
+        const leftIndex = Math.min(...tokens.map((token) => leftHaystack.indexOf(token)).filter((i) => i >= 0));
+        const rightIndex = Math.min(...tokens.map((token) => rightHaystack.indexOf(token)).filter((i) => i >= 0));
+
+        if (leftIndex !== rightIndex) {
+          return leftIndex - rightIndex;
+        }
+
+        if (left.name.length !== right.name.length) {
+          return left.name.length - right.name.length;
+        }
+
+        return left.name.localeCompare(right.name, "zh-Hans-CN");
+      });
   }
 
   function renderLookupResults(type) {
@@ -1111,7 +1145,7 @@
     }
 
     const query = String(column.inputs.productSpec || "");
-    const matches = getReadyMadeMatches(query).slice(0, 8);
+    const matches = getReadyMadeMatches(query);
 
     if (!String(query).trim()) {
       return `
@@ -1131,6 +1165,7 @@
 
     return `
       <div class="ready-made-suggestions">
+        <div class="ready-made-suggestions-count">共 ${matches.length} 条匹配结果</div>
         ${matches
           .map(
             (record) => `

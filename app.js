@@ -1154,6 +1154,20 @@
     `;
   }
 
+  function updateReadyMadeSuggestionsInDom(columnId) {
+    if (!columnId) {
+      return;
+    }
+
+    const container = document.querySelector(`[data-ready-made-suggestions-for="${columnId}"]`);
+    if (!(container instanceof HTMLElement)) {
+      return;
+    }
+
+    const column = state.columns.find((item) => item.id === columnId);
+    container.innerHTML = renderReadyMadeSuggestions(column);
+  }
+
   function renderPricePlanResults() {
     const query = elements.pricePlanSearchInput.value;
     const matches = getPricePlanMatches(query);
@@ -1373,7 +1387,9 @@
                       value="${escapeHtml(String(displayValue ?? ""))}"
                       placeholder="${placeholder}"
                     />
-                    ${readyMadeSuggestions}
+                    <div data-ready-made-suggestions-for="${escapeHtml(columnResult.id)}">
+                      ${readyMadeSuggestions}
+                    </div>
                   </div>
                   ${
                     row.key === "productSpec" && column?.mode === "readyMade"
@@ -1563,8 +1579,15 @@
 
     column.inputs[inputKey] = inputStoredValue(input, target.value);
 
-    if (inputKey === "productSpec" && column.mode === "readyMade") {
-      syncReadyMadeInputs(column);
+    if (input.type === "text") {
+      persistState();
+
+      if (inputKey === "productSpec" && column.mode === "readyMade") {
+        activeReadyMadeSuggestionColumnId = columnId;
+        updateReadyMadeSuggestionsInDom(columnId);
+      }
+
+      return;
     }
 
     if (inputKey === "expenseAmount") {
@@ -1746,8 +1769,12 @@
         return;
       }
 
+      const previousColumnId = activeReadyMadeSuggestionColumnId;
       activeReadyMadeSuggestionColumnId = columnId;
-      renderWithInputFocus(columnId, inputKey, target.selectionStart, target.selectionEnd);
+      if (previousColumnId && previousColumnId !== columnId) {
+        updateReadyMadeSuggestionsInDom(previousColumnId);
+      }
+      updateReadyMadeSuggestionsInDom(columnId);
     });
 
     elements.resultTableBody.addEventListener(
@@ -1814,8 +1841,9 @@
           !target.closest(".table-input-stack") &&
           !target.closest(".ready-made-suggestions")
         ) {
+          const previousColumnId = activeReadyMadeSuggestionColumnId;
           activeReadyMadeSuggestionColumnId = null;
-          render();
+          updateReadyMadeSuggestionsInDom(previousColumnId);
         }
       },
       true,

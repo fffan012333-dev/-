@@ -1470,6 +1470,34 @@
     renderLookupResults("warehouse");
   }
 
+  function restoreInputSelection(input, selectionStart, selectionEnd) {
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const applySelection = () => {
+      input.focus({ preventScroll: true });
+
+      const hasExplicitRange =
+        typeof selectionStart === "number" && Number.isFinite(selectionStart) &&
+        typeof selectionEnd === "number" && Number.isFinite(selectionEnd);
+
+      try {
+        if (hasExplicitRange) {
+          input.setSelectionRange(selectionStart, selectionEnd);
+        } else {
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      } catch (error) {
+        // Ignore when the browser does not support restoring ranges for this input.
+      }
+    };
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(applySelection);
+    });
+  }
+
   function renderWithInputFocus(columnId, inputKey, selectionStart, selectionEnd) {
     render();
 
@@ -1479,21 +1507,7 @@
       return;
     }
 
-    input.focus();
-
-    if (typeof selectionStart === "number" && typeof selectionEnd === "number") {
-      try {
-        input.setSelectionRange(selectionStart, selectionEnd);
-      } catch (error) {
-        // Ignore when the browser does not support restoring ranges for this input.
-      }
-    } else {
-      try {
-        input.setSelectionRange(input.value.length, input.value.length);
-      } catch (error) {
-        // Ignore when the browser does not support restoring ranges for this input.
-      }
-    }
+    restoreInputSelection(input, selectionStart, selectionEnd);
   }
 
   function commitFormulaValue(columnId, inputKey) {

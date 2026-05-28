@@ -300,13 +300,30 @@
     }
   }
 
+  function normalizeFormulaLikeValue(value, options = {}) {
+    const { stripPercent = false } = options;
+    let normalized = String(value || "").trim();
+    if (!normalized) {
+      return "";
+    }
+
+    normalized = normalized.replace(/^=\s*/, "").trim();
+    normalized = normalized.replace(/,/g, "");
+
+    if (stripPercent) {
+      normalized = normalized.replaceAll("%", "").replaceAll("％", "");
+    }
+
+    return normalized.trim();
+  }
+
   function sanitizeNumber(value) {
     if (value === "" || value === null || value === undefined) {
       return 0;
     }
 
     if (typeof value === "string") {
-      const evaluated = evaluateArithmeticExpression(value);
+      const evaluated = evaluateArithmeticExpression(normalizeFormulaLikeValue(value));
       if (evaluated !== null) {
         return evaluated;
       }
@@ -322,7 +339,7 @@
     }
 
     if (typeof value === "string") {
-      const evaluated = evaluateArithmeticExpression(value);
+      const evaluated = evaluateArithmeticExpression(normalizeFormulaLikeValue(value));
       if (evaluated !== null) {
         return evaluated;
       }
@@ -374,7 +391,10 @@
       return storedValue;
     }
 
-    const evaluated = evaluateArithmeticExpression(storedValue);
+    const normalizedExpression = normalizeFormulaLikeValue(storedValue, {
+      stripPercent: input.type === "percent",
+    });
+    const evaluated = evaluateArithmeticExpression(normalizedExpression);
     if (evaluated === null) {
       return storedValue;
     }

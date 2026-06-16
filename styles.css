@@ -180,6 +180,35 @@ input {
   align-items: center;
 }
 
+.save-field {
+  display: grid;
+  gap: 4px;
+  min-width: 176px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.save-field.compact {
+  min-width: 0;
+}
+
+.save-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 253, 249, 0.9);
+  color: var(--text);
+  font: inherit;
+}
+
+.save-input:focus {
+  border-color: rgba(15, 118, 110, 0.45);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
 .tool-panel {
   padding-top: 10px;
   padding-bottom: 10px;
@@ -294,6 +323,38 @@ input {
   gap: 8px;
 }
 
+.saved-scenario-group {
+  display: grid;
+  gap: 8px;
+}
+
+.saved-scenario-group + .saved-scenario-group {
+  margin-top: 10px;
+}
+
+.saved-scenario-group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--accent-deep);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.saved-scenario-group-head span:last-child {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.saved-scenario-group-list {
+  display: grid;
+  gap: 8px;
+}
+
 .saved-scenario-card,
 .saved-scenario-empty {
   padding: 10px 12px;
@@ -321,6 +382,13 @@ input {
 
 .saved-scenario-name {
   font-weight: 700;
+}
+
+.saved-scenario-note {
+  margin: 3px 0 0;
+  color: var(--accent-deep);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .saved-scenario-meta,
@@ -352,6 +420,11 @@ input {
   justify-content: flex-end;
   flex-wrap: wrap;
   margin-top: 8px;
+}
+
+.saved-scenario-edit {
+  display: grid;
+  gap: 8px;
 }
 
 .scenario-preview-content {

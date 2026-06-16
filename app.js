@@ -2,6 +2,7 @@
   const STORAGE_KEY = "oi-calculator:v6";
   const LEGACY_STORAGE_KEYS = ["oi-calculator:v5"];
   const SCENARIOS_STORAGE_KEY = "oi-calculator:saved-scenarios:v1";
+  const DEFAULT_SCENARIO_CATEGORY = "未归类";
   const config = window.OI_CALCULATOR_CONFIG;
 
   const elements = {
@@ -19,6 +20,8 @@
     pricePlanSearchResults: document.getElementById("price-plan-search-results"),
     pricePlanSelection: document.getElementById("price-plan-selection"),
     oiRateSummary: document.getElementById("oi-rate-summary"),
+    saveCategoryInput: document.getElementById("save-category-input"),
+    saveNoteInput: document.getElementById("save-note-input"),
     saveScenarioButton: document.getElementById("save-scenario-button"),
     viewHistoryButton: document.getElementById("view-history-button"),
     saveStatus: document.getElementById("save-status"),
@@ -59,6 +62,8 @@
   let activeUtilityPanel = null;
   let lastRenderedColumnCount = null;
   let activeReadyMadeSuggestionColumnId = null;
+  let editingScenarioId = null;
+  let editingScenarioDraft = null;
 
   function loadState() {
     const fallback = {
@@ -194,6 +199,8 @@
           return {
             id: typeof item.id === "string" ? item.id : createScenarioId(),
             name: typeof item.name === "string" ? item.name : "未命名方案",
+            category: cleanScenarioText(item.category) || DEFAULT_SCENARIO_CATEGORY,
+            note: cleanScenarioText(item.note),
             savedAt: typeof item.savedAt === "string" ? item.savedAt : new Date().toISOString(),
             columns: cloneColumnsForStorage(Array.isArray(item.columns) ? item.columns : []),
           };
@@ -230,6 +237,58 @@
       hour: "2-digit",
       minute: "2-digit",
     }).format(date);
+  }
+
+  function cleanScenarioText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function getScenarioCategory(scenario) {
+    return cleanScenarioText(scenario?.category) || DEFAULT_SCENARIO_CATEGORY;
+  }
+
+  function getScenarioNote(scenario) {
+    return cleanScenarioText(scenario?.note);
+  }
+
+  function getSaveCategoryValue() {
+    return cleanScenarioText(elements.saveCategoryInput?.value) || DEFAULT_SCENARIO_CATEGORY;
+  }
+
+  function getSaveNoteValue() {
+    return cleanScenarioText(elements.saveNoteInput?.value);
+  }
+
+  function groupSavedScenariosByCategory() {
+    const groupMap = new Map();
+    savedScenarios.forEach((scenario) => {
+      const category = getScenarioCategory(scenario);
+      if (!groupMap.has(category)) {
+        groupMap.set(category, {
+          category,
+          latestSavedAt: scenario.savedAt || "",
+          scenarios: [],
+        });
+      }
+      const group = groupMap.get(category);
+      group.scenarios.push(scenario);
+      if (String(scenario.savedAt || "") > String(group.latestSavedAt || "")) {
+        group.latestSavedAt = scenario.savedAt || "";
+      }
+    });
+
+    return Array.from(groupMap.values()).sort((left, right) => {
+      if (String(left.latestSavedAt) !== String(right.latestSavedAt)) {
+        return String(right.latestSavedAt).localeCompare(String(left.latestSavedAt));
+      }
+      if (left.category === DEFAULT_SCENARIO_CATEGORY) {
+        return 1;
+      }
+      if (right.category === DEFAULT_SCENARIO_CATEGORY) {
+        return -1;
+      }
+      return left.category.localeCompare(right.category, "zh-Hans-CN");
+    });
   }
 
   function getScenarioNamingColumn() {
@@ -502,6 +561,9 @@
     if (record.warehouse !== undefined) {
       column.inputs.unitWarehouseCost = record.warehouse;
     }
+    if (record.arrivalPrice !== undefined) {
+      column.inputs.unitArrivalPrice = record.arrivalPrice;
+    }
   }
 
   function clearReadyMadeDerivedInputs(column) {
@@ -509,6 +571,7 @@
       return;
     }
 
+    column.inputs.unitArrivalPrice = "";
     column.inputs.unitCogs = "";
     column.inputs.unitWarehouseCost = "";
   }
@@ -647,6 +710,118 @@
     });
   }
 
+  function renderSavedScenarioCard(scenario) {
+    const isEditing = editingScenarioId === scenario.id;
+    const note = getScenarioNote(scenario);
+
+    if (isEditing) {
+      const draft = editingScenarioDraft || {
+        category: getScenarioCategory(scenario),
+        note,
+      };
+      return `
+        <article class="saved-scenario-card is-editing">
+          <div class="saved-scenario-edit">
+            <label class="save-field compact">
+              <span>方案归类</span>
+              <input
+                class="save-input"
+                type="text"
+                data-edit-scenario-id="${escapeHtml(scenario.id)}"
+                data-edit-field="category"
+                value="${escapeHtml(draft.category)}"
+              />
+            </label>
+            <label class="save-field compact">
+              <span>备注名字</span>
+              <input
+                class="save-input"
+                type="text"
+                data-edit-scenario-id="${escapeHtml(scenario.id)}"
+                data-edit-field="note"
+                value="${escapeHtml(draft.note)}"
+              />
+            </label>
+          </div>
+          <div class="saved-scenario-actions">
+            <button type="button" class="mini-button" data-save-scenario-meta-id="${escapeHtml(scenario.id)}">
+              保存
+            </button>
+            <button type="button" class="mini-link-button" data-cancel-scenario-edit-id="${escapeHtml(scenario.id)}">
+              取消
+            </button>
+          </div>
+        </article>
+      `;
+    }
+
+    return `
+      <article class="saved-scenario-card ${scenario.id === state.activeScenarioId ? "is-active" : ""}">
+        <div class="saved-scenario-main">
+          <div>
+            <p class="saved-scenario-name">${escapeHtml(scenario.name)}</p>
+            ${note ? `<p class="saved-scenario-note">备注：${escapeHtml(note)}</p>` : ""}
+            <p class="saved-scenario-meta">
+              ${escapeHtml(`${scenario.columns.length} 个对比项`)}
+            </p>
+            <p class="saved-scenario-meta">
+              最近保存 ${escapeHtml(formatSavedAt(scenario.savedAt) || "-")}
+            </p>
+          </div>
+          ${scenario.id === state.activeScenarioId ? '<span class="saved-scenario-badge">当前方案</span>' : ""}
+        </div>
+        <div class="saved-scenario-actions">
+          <button
+            type="button"
+            class="mini-button"
+            data-append-scenario-id="${escapeHtml(scenario.id)}"
+          >
+            加入对比
+          </button>
+          <button
+            type="button"
+            class="mini-button"
+            data-load-scenario-id="${escapeHtml(scenario.id)}"
+          >
+            读取
+          </button>
+          <button
+            type="button"
+            class="mini-button"
+            data-edit-scenario-meta-id="${escapeHtml(scenario.id)}"
+          >
+            编辑
+          </button>
+          <button
+            type="button"
+            class="mini-link-button"
+            data-delete-scenario-id="${escapeHtml(scenario.id)}"
+          >
+            删除
+          </button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderSavedScenarioGroups() {
+    return groupSavedScenariosByCategory()
+      .map(
+        (group) => `
+          <section class="saved-scenario-group">
+            <div class="saved-scenario-group-head">
+              <span>${escapeHtml(group.category)}</span>
+              <span>${group.scenarios.length} 个方案</span>
+            </div>
+            <div class="saved-scenario-group-list">
+              ${group.scenarios.map((scenario) => renderSavedScenarioCard(scenario)).join("")}
+            </div>
+          </section>
+        `,
+      )
+      .join("");
+  }
+
   function renderSaveCenter() {
     if (elements.saveScenarioButton) {
       elements.saveScenarioButton.textContent = "保存当前方案";
@@ -684,49 +859,7 @@
       return;
     }
 
-    elements.savedScenariosList.innerHTML = savedScenarios
-      .map(
-        (scenario) => `
-          <article class="saved-scenario-card ${scenario.id === state.activeScenarioId ? "is-active" : ""}">
-            <div class="saved-scenario-main">
-              <div>
-                <p class="saved-scenario-name">${escapeHtml(scenario.name)}</p>
-                <p class="saved-scenario-meta">
-                  ${escapeHtml(`${scenario.columns.length} 个对比项`)}
-                </p>
-                <p class="saved-scenario-meta">
-                  最近保存 ${escapeHtml(formatSavedAt(scenario.savedAt) || "-")}
-                </p>
-              </div>
-              ${scenario.id === state.activeScenarioId ? '<span class="saved-scenario-badge">当前方案</span>' : ""}
-            </div>
-            <div class="saved-scenario-actions">
-              <button
-                type="button"
-                class="mini-button"
-                data-append-scenario-id="${escapeHtml(scenario.id)}"
-              >
-                加入对比
-              </button>
-              <button
-                type="button"
-                class="mini-button"
-                data-load-scenario-id="${escapeHtml(scenario.id)}"
-              >
-                读取
-              </button>
-              <button
-                type="button"
-                class="mini-link-button"
-                data-delete-scenario-id="${escapeHtml(scenario.id)}"
-              >
-                删除
-              </button>
-            </div>
-          </article>
-        `,
-      )
-      .join("");
+    elements.savedScenariosList.innerHTML = renderSavedScenarioGroups();
   }
 
   function renderScenarioPreview() {
@@ -755,10 +888,11 @@
     }
 
     const results = getScenarioResults(scenario.columns);
+    const note = getScenarioNote(scenario);
     elements.scenarioPreviewTitle.textContent = scenario.name;
-    elements.scenarioPreviewMeta.textContent = `最近保存 ${formatSavedAt(
+    elements.scenarioPreviewMeta.textContent = `${getScenarioCategory(scenario)} · 最近保存 ${formatSavedAt(
       scenario.savedAt,
-    )} · ${results.length} 个对比项`;
+    )} · ${results.length} 个对比项${note ? ` · ${note}` : ""}`;
     elements.scenarioPreviewContent.innerHTML = `
       <div class="scenario-preview-grid">
         ${results
@@ -817,6 +951,8 @@
     const payload = {
       id: createScenarioId(),
       name: scenarioName,
+      category: getSaveCategoryValue(),
+      note: getSaveNoteValue(),
       savedAt: new Date().toISOString(),
       columns: cloneColumnsForStorage(state.columns),
     };
@@ -832,6 +968,56 @@
     persistState();
     render();
     setSaveStatus(`已保存：${scenarioName}，可点击“查看历史方案”继续调用。`, "success");
+  }
+
+  function startEditingScenarioMeta(scenarioId) {
+    const scenario = savedScenarios.find((item) => item.id === scenarioId);
+    if (!scenario) {
+      setSaveStatus("没有找到这个方案，可以重新保存一版。");
+      return;
+    }
+
+    editingScenarioId = scenario.id;
+    editingScenarioDraft = {
+      category: getScenarioCategory(scenario),
+      note: getScenarioNote(scenario),
+    };
+    renderSaveCenter();
+  }
+
+  function updateScenarioMetaDraft(field, value) {
+    if (!editingScenarioDraft) {
+      return;
+    }
+
+    if (field === "category") {
+      editingScenarioDraft.category = cleanScenarioText(value);
+    }
+    if (field === "note") {
+      editingScenarioDraft.note = cleanScenarioText(value);
+    }
+  }
+
+  function saveScenarioMeta(scenarioId) {
+    const scenario = savedScenarios.find((item) => item.id === scenarioId);
+    if (!scenario || !editingScenarioDraft) {
+      setSaveStatus("没有找到这个方案，可以重新保存一版。");
+      return;
+    }
+
+    scenario.category = cleanScenarioText(editingScenarioDraft.category) || DEFAULT_SCENARIO_CATEGORY;
+    scenario.note = cleanScenarioText(editingScenarioDraft.note);
+    editingScenarioId = null;
+    editingScenarioDraft = null;
+    persistSavedScenarios();
+    renderSaveCenter();
+    setSaveStatus(`已更新“${scenario.name}”的归类和备注。`, "success");
+  }
+
+  function cancelScenarioMetaEdit() {
+    editingScenarioId = null;
+    editingScenarioDraft = null;
+    renderSaveCenter();
   }
 
   function previewScenario(scenarioId) {
@@ -1197,7 +1383,9 @@
               >
                 <span class="ready-made-suggestion-name">${escapeHtml(record.name)}</span>
                 <span class="ready-made-suggestion-meta">
-                  COGS ${escapeHtml(formatValue(record.cogs, "currency"))} / 仓物 ${escapeHtml(
+                  到手价 ${escapeHtml(formatValue(record.arrivalPrice, "currency"))} / COGS ${escapeHtml(
+                    formatValue(record.cogs, "currency"),
+                  )} / 仓物 ${escapeHtml(
                     formatValue(record.warehouse, "currency"),
                   )}
                 </span>
@@ -1448,7 +1636,7 @@
                   </div>
                   ${
                     row.key === "productSpec" && column?.mode === "readyMade"
-                      ? '<span class="comparison-auto-tag">匹配后自动带入单品 COGS / 单品仓物</span>'
+                      ? '<span class="comparison-auto-tag">匹配后自动带入单品到手价 / 单品 COGS / 单品仓物</span>'
                       : ""
                   }
                 </td>
@@ -1735,6 +1923,30 @@
         return;
       }
 
+      const saveMetaButton = target.closest("[data-save-scenario-meta-id]");
+      if (saveMetaButton) {
+        const scenarioId = saveMetaButton.getAttribute("data-save-scenario-meta-id");
+        if (scenarioId) {
+          saveScenarioMeta(scenarioId);
+        }
+        return;
+      }
+
+      const cancelEditButton = target.closest("[data-cancel-scenario-edit-id]");
+      if (cancelEditButton) {
+        cancelScenarioMetaEdit();
+        return;
+      }
+
+      const editMetaButton = target.closest("[data-edit-scenario-meta-id]");
+      if (editMetaButton) {
+        const scenarioId = editMetaButton.getAttribute("data-edit-scenario-meta-id");
+        if (scenarioId) {
+          startEditingScenarioMeta(scenarioId);
+        }
+        return;
+      }
+
       const loadButton = target.closest("[data-load-scenario-id]");
       if (loadButton) {
         const scenarioId = loadButton.getAttribute("data-load-scenario-id");
@@ -1764,6 +1976,21 @@
       }
 
       deleteScenario(scenarioId);
+    });
+
+    elements.savedScenariosList.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) {
+        return;
+      }
+
+      const field = target.getAttribute("data-edit-field");
+      const scenarioId = target.getAttribute("data-edit-scenario-id");
+      if (!field || !scenarioId || scenarioId !== editingScenarioId) {
+        return;
+      }
+
+      updateScenarioMetaDraft(field, target.value);
     });
 
     elements.resultTableBody.addEventListener("compositionstart", (event) => {
